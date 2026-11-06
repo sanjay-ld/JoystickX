@@ -33,6 +33,7 @@ public sealed class InputSnapshot
 {
     public int[] ButtonStates { get; init; } = Array.Empty<int>();
     public int[] Axes { get; init; } = Array.Empty<int>();
+    public int[] AxisCenters { get; init; } = Array.Empty<int>();
     public int[] Pov { get; init; } = Array.Empty<int>();
 }
 

@@ -45,16 +45,24 @@ public sealed class VirtualXboxController : IDisposable
             int Axis(int index) => input.Axes.Length > index ? input.Axes[index] : 32768;
             bool Button(int index) => input.ButtonStates.Length > index && input.ButtonStates[index] != 0;
             var p = processor.Profile;
-            _controller.SetAxisValue(Xbox360Axis.LeftThumbX, processor.ApplyStick(Axis(0), false));
-            _controller.SetAxisValue(Xbox360Axis.LeftThumbY, processor.ApplyStick(Axis(1), p.InvertLeftY));
-            _controller.SetAxisValue(Xbox360Axis.RightThumbX, processor.ApplyStick(Axis(3), false));
-            _controller.SetAxisValue(Xbox360Axis.RightThumbY, processor.ApplyStick(Axis(4), p.InvertRightY));
+            processor.LockRightStickAxes(input);
+            int Center(int index) => input.AxisCenters.Length > index ? input.AxisCenters[index] : 32768;
+            int rightX=p.RightStickXAxis;
+            int rightY=p.RightStickYAxis;
+            _controller.SetAxisValue(Xbox360Axis.LeftThumbX, processor.ApplyStick(Axis(0), false,0,1.0,Center(0)));
+            _controller.SetAxisValue(Xbox360Axis.LeftThumbY, processor.ApplyStick(Axis(1), p.InvertLeftY,1,1.0,Center(1)));
+            _controller.SetAxisValue(Xbox360Axis.RightThumbX, processor.ApplyStick(Axis(rightX), false,rightX,1.0,Center(rightX)));
+            _controller.SetAxisValue(Xbox360Axis.RightThumbY, processor.ApplyStick(Axis(rightY), p.InvertRightY,rightY,1.0,Center(rightY)));
             _controller.SetSliderValue(Xbox360Slider.LeftTrigger, 0);
             _controller.SetSliderValue(Xbox360Slider.RightTrigger, 0);
             if(p.TriggerMap.TryGetValue("LeftTrigger",out int leftTriggerAxis))
-                _controller.SetSliderValue(Xbox360Slider.LeftTrigger, processor.ApplyTrigger(Axis(leftTriggerAxis)));
+                _controller.SetSliderValue(Xbox360Slider.LeftTrigger,
+                    leftTriggerAxis>=0 ? processor.ApplyTrigger(Axis(leftTriggerAxis),leftTriggerAxis)
+                                       : (byte)(Button(-leftTriggerAxis-1)?255:0));
             if(p.TriggerMap.TryGetValue("RightTrigger",out int rightTriggerAxis))
-                _controller.SetSliderValue(Xbox360Slider.RightTrigger, processor.ApplyTrigger(Axis(rightTriggerAxis)));
+                _controller.SetSliderValue(Xbox360Slider.RightTrigger,
+                    rightTriggerAxis>=0 ? processor.ApplyTrigger(Axis(rightTriggerAxis),rightTriggerAxis)
+                                        : (byte)(Button(-rightTriggerAxis-1)?255:0));
             foreach (var pair in p.ButtonMap)
             {
                 int physical = pair.Value;

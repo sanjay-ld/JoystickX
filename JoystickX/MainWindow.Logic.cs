@@ -37,6 +37,10 @@ public partial class MainWindow
     private string _previousPovDirection = "Centered";
     private int _guidedBaselineLeftTrigger = 32768;
     private int _guidedBaselineRightTrigger = 32768;
+    private int[] _guidedAxisBaselines = Array.Empty<int>();
+    private int[] _detectingAxisBaselines = Array.Empty<int>();
+    private int _guidedLeftTriggerAxis = -1;
+    private int _guidedRightTriggerAxis = -1;
 
     private void InitializeJoystickX()
     {
@@ -72,12 +76,38 @@ public partial class MainWindow
                 {
                     var pressed=_mapping.GetPressedPhysicalButtons(_snapshot);
                     var found=pressed.Except(_previousPressed).FirstOrDefault(i=>i>=0);
-                    if(found>=0)
+                    int detectedTriggerAxis=-1;
+                    if(_detectingOutput=="LeftTrigger" || _detectingOutput=="RightTrigger")
+                    {
+                        for(int axis=0;axis<_snapshot.Axes.Length;axis++)
+                        {
+                            int baseline=axis<_detectingAxisBaselines.Length?_detectingAxisBaselines[axis]:32768;
+                            if(Math.Abs(_snapshot.Axes[axis]-baseline)>3000)
+                            { detectedTriggerAxis=axis; break; }
+                        }
+                    }
+                    if(detectedTriggerAxis>=0)
                     {
                         Dispatcher.Invoke(() =>
                         {
                             _detecting=false;
-                            if(IsPhysicalButtonAlreadyMapped(found,_detectingOutput,out string existingOutput))
+                            _profile.TriggerMap[_detectingOutput]=detectedTriggerAxis;
+                            RefreshMapping();
+                            HighlightSelectedMapping(_detectingOutput);
+                        });
+                    }
+                    else if(found>=0)
+                    {
+                        Dispatcher.Invoke(() =>
+                        {
+                            _detecting=false;
+                            if(_detectingOutput=="LeftTrigger" || _detectingOutput=="RightTrigger")
+                            {
+                                _profile.TriggerMap[_detectingOutput]=-(found+1);
+                                RefreshMapping();
+                                HighlightSelectedMapping(_detectingOutput);
+                            }
+                            else if(IsPhysicalButtonAlreadyMapped(found,_detectingOutput,out string existingOutput))
                             {
                                 GuidedStatus.Text=$"Physical Button {found+1} is already assigned to {GetShortOutputName(existingOutput)}. Press a different button.";
                                 DeviceStatus.Text=GuidedStatus.Text;
@@ -109,9 +139,10 @@ public partial class MainWindow
                             if(triggerDetected)
                             {
                                 string triggerOutput=leftTrigger ? "LeftTrigger" : "RightTrigger";
-                                if(!_profile.TriggerMap.ContainsValue(leftTrigger ? 2 : 5))
+                                int triggerAxis=leftTrigger?_guidedLeftTriggerAxis:_guidedRightTriggerAxis;
+                                if(triggerAxis>=0 && !_profile.TriggerMap.ContainsValue(triggerAxis))
                                 {
-                                    _profile.TriggerMap[triggerOutput]=leftTrigger ? 2 : 5;
+                                    _profile.TriggerMap[triggerOutput]=triggerAxis;
                                     AdvanceGuidedMapping();
                                 }
                                 return;
@@ -126,6 +157,15 @@ public partial class MainWindow
                                 else
                                 {
                                     GuidedStatus.Text=$"Physical {dpadDetected} D-pad direction is already mapped. Press a different direction.";
+                                }
+                                return;
+                            }
+                            if(target=="LeftTrigger" || target=="RightTrigger")
+                            {
+                                if(found>=0)
+                                {
+                                    _profile.TriggerMap[target]=-(found+1);
+                                    AdvanceGuidedMapping();
                                 }
                                 return;
                             }
@@ -157,11 +197,11 @@ public partial class MainWindow
             catch(Exception ex){Dispatcher.Invoke(()=>DeviceStatus.Text="Input loop error: "+ex.Message);await Task.Delay(500);}
         }
     }
-    private void UpdateMonitor(){var s=_snapshot;int Axis(int i)=>s.Axes.Length>i?s.Axes[i]:32768;short N(int i,bool inv){double v=(Axis(i)-32768)/32768.0;if(inv)v=-v;return(short)Math.Clamp(v*32767,-32768,32767);}LX.Value=N(0,false);LY.Value=N(1,_profile.InvertLeftY);RX.Value=N(3,false);RY.Value=N(4,_profile.InvertRightY);LeftStickText.Text=$"Left X: {N(0,false)}   Left Y: {N(1,_profile.InvertLeftY)}";RightStickText.Text=$"Right X: {N(3,false)}   Right Y: {N(4,_profile.InvertRightY)}";LT.Value=_processor.ApplyTrigger(Axis(2));RT.Value=s.Axes.Length>5?_processor.ApplyTrigger(Axis(5)):0;LTText.Text=$"LT: {(byte)LT.Value}";RTText.Text=$"RT: {(byte)RT.Value}";if(ButtonPanel.Children.Count==0)for(int i=0;i<16;i++)ButtonPanel.Children.Add(new System.Windows.Controls.Border{Margin=new System.Windows.Thickness(3),CornerRadius=new System.Windows.CornerRadius(5),Padding=new System.Windows.Thickness(9,5,9,5),Background=System.Windows.Media.Brushes.DarkSlateGray,Child=new System.Windows.Controls.TextBlock{Text=$"B{i+1}",Foreground=System.Windows.Media.Brushes.White}});for(int i=0;i<ButtonPanel.Children.Count;i++){var b=(System.Windows.Controls.Border)ButtonPanel.Children[i];b.Background=new System.Windows.Media.SolidColorBrush(i<s.ButtonStates.Length&&s.ButtonStates[i]!=0?System.Windows.Media.Color.FromRgb(66,184,131):System.Windows.Media.Color.FromRgb(37,41,50));}DpadText.Text=s.Pov.Length>0?DpadName(s.Pov[0]):"Centered / unavailable";}
+    private void UpdateMonitor(){var s=_snapshot;_processor.LockRightStickAxes(s);int Axis(int i)=>s.Axes.Length>i?s.Axes[i]:32768;int Center(int i)=>s.AxisCenters.Length>i?s.AxisCenters[i]:32768;short N(int i,bool inv)=>_processor.ApplyStick(Axis(i),inv,i,1.0,Center(i));LX.Value=N(0,false);LY.Value=N(1,_profile.InvertLeftY);int rightX=_profile.RightStickXAxis;int rightY=_profile.RightStickYAxis;RX.Value=_processor.ApplyStick(Axis(rightX),false,rightX,1.0,Center(rightX));RY.Value=_processor.ApplyStick(Axis(rightY),_profile.InvertRightY,rightY,1.0,Center(rightY));LeftStickText.Text=$"Left X: {(short)LX.Value}   Left Y: {(short)LY.Value}";RightStickText.Text=$"Right X: {(short)RX.Value}   Right Y: {(short)RY.Value}";int leftTriggerAxis=_profile.TriggerMap.TryGetValue("LeftTrigger",out int leftAxis)?leftAxis:2;int rightTriggerAxis=_profile.TriggerMap.TryGetValue("RightTrigger",out int rightAxis)?rightAxis:5;LT.Value=leftTriggerAxis>=0?_processor.ApplyTrigger(Axis(leftTriggerAxis),leftTriggerAxis):(byte)(s.ButtonStates.Length> -leftTriggerAxis-1&&s.ButtonStates[-leftTriggerAxis-1]!=0?255:0);RT.Value=rightTriggerAxis>=0?_processor.ApplyTrigger(Axis(rightTriggerAxis),rightTriggerAxis):(byte)(s.ButtonStates.Length> -rightTriggerAxis-1&&s.ButtonStates[-rightTriggerAxis-1]!=0?255:0);LTText.Text=$"LT: {(byte)LT.Value}";RTText.Text=$"RT: {(byte)RT.Value}";if(ButtonPanel.Children.Count==0)for(int i=0;i<16;i++)ButtonPanel.Children.Add(new System.Windows.Controls.Border{Margin=new System.Windows.Thickness(3),CornerRadius=new System.Windows.CornerRadius(5),Padding=new System.Windows.Thickness(9,5,9,5),Background=System.Windows.Media.Brushes.DarkSlateGray,Child=new System.Windows.Controls.TextBlock{Text=$"B{i+1}",Foreground=System.Windows.Media.Brushes.White}});for(int i=0;i<ButtonPanel.Children.Count;i++){var b=(System.Windows.Controls.Border)ButtonPanel.Children[i];b.Background=new System.Windows.Media.SolidColorBrush(i<s.ButtonStates.Length&&s.ButtonStates[i]!=0?System.Windows.Media.Color.FromRgb(66,184,131):System.Windows.Media.Color.FromRgb(37,41,50));}DpadText.Text=s.Pov.Length>0?DpadName(s.Pov[0]):"Centered / unavailable";}
     private static string DpadName(int p)=>p switch{0=>"Up",4500=>"Up + Right",9000=>"Right",13500=>"Right + Down",18000=>"Down",22500=>"Down + Left",27000=>"Left",31500=>"Left + Up",-1=>"Centered",_=>"Centered"};
     private void OpenDriver_Click(object sender,System.Windows.RoutedEventArgs e)=>Process.Start(new ProcessStartInfo{FileName=DriverManager.OfficialDownloadUrl,UseShellExecute=true});
     private void SaveProfile_Click(object sender,System.Windows.RoutedEventArgs e){if(string.IsNullOrWhiteSpace(ProfileName.Text))return;ApplySettings();_profiles.Save(ProfileName.Text,_profile);RefreshProfiles();}
-    private void LoadProfile_Click(object sender,System.Windows.RoutedEventArgs e){if(ProfileCombo.SelectedItem is not string name)return;var p=_profiles.Load(name);_profile.StickDeadzone=p.StickDeadzone;_profile.TriggerDeadzone=p.TriggerDeadzone;_profile.Sensitivity=p.Sensitivity;_profile.InvertLeftY=p.InvertLeftY;_profile.InvertRightY=p.InvertRightY;DeadzoneSlider.Value=p.StickDeadzone;TriggerSlider.Value=p.TriggerDeadzone;SensitivitySlider.Value=p.Sensitivity;InvertLeftY.IsChecked=p.InvertLeftY;InvertRightY.IsChecked=p.InvertRightY;_profile.ButtonMap.Clear();foreach(var x in p.ButtonMap)_profile.ButtonMap[x.Key]=x.Value;_profile.TriggerMap.Clear();foreach(var x in p.TriggerMap)_profile.TriggerMap[x.Key]=x.Value;_profile.DpadMap.Clear();foreach(var x in p.DpadMap)_profile.DpadMap[x.Key]=x.Value;RefreshMapping();}
+    private void LoadProfile_Click(object sender,System.Windows.RoutedEventArgs e){if(ProfileCombo.SelectedItem is not string name)return;var p=_profiles.Load(name);_profile.StickDeadzone=p.StickDeadzone;_profile.TriggerDeadzone=p.TriggerDeadzone;_profile.Sensitivity=p.Sensitivity;_profile.InvertLeftY=p.InvertLeftY;_profile.InvertRightY=p.InvertRightY;_profile.RightStickXAxis=p.RightStickXAxis;_profile.RightStickYAxis=p.RightStickYAxis;DeadzoneSlider.Value=p.StickDeadzone;TriggerSlider.Value=p.TriggerDeadzone;SensitivitySlider.Value=p.Sensitivity;InvertLeftY.IsChecked=p.InvertLeftY;InvertRightY.IsChecked=p.InvertRightY;_profile.ButtonMap.Clear();foreach(var x in p.ButtonMap)_profile.ButtonMap[x.Key]=x.Value;_profile.TriggerMap.Clear();foreach(var x in p.TriggerMap)_profile.TriggerMap[x.Key]=x.Value;_profile.DpadMap.Clear();foreach(var x in p.DpadMap)_profile.DpadMap[x.Key]=x.Value;RefreshMapping();}
     private void ApplySettings(){_profile.StickDeadzone=DeadzoneSlider.Value;_profile.TriggerDeadzone=TriggerSlider.Value;_profile.Sensitivity=SensitivitySlider.Value;_profile.InvertLeftY=InvertLeftY.IsChecked==true;_profile.InvertRightY=InvertRightY.IsChecked==true;}
     private void ResetMapping_Click(object sender,System.Windows.RoutedEventArgs e){_processor.DefaultProfile();RefreshMapping();}
     private void RefreshMapping()
@@ -179,7 +219,7 @@ public partial class MainWindow
             if(output=="LeftTrigger"||output=="RightTrigger")
             {
                 if(_profile.TriggerMap.TryGetValue(output,out int axis))
-                    physicalText=output=="LeftTrigger" ? "Physical LT Trigger" : "Physical RT Trigger";
+                    physicalText=axis>=0 ? $"Physical Trigger Axis {axis+1}" : $"Physical Button {-axis}";
             }
             else if(output.StartsWith("Dpad",StringComparison.Ordinal))
             {
@@ -219,6 +259,7 @@ public partial class MainWindow
         _detectingOutput=(MapTargetCombo.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Content?.ToString() ?? "A";
         _detecting=true;
         _previousPressed=_mapping.GetPressedPhysicalButtons(_snapshot);
+        _detectingAxisBaselines=_snapshot.Axes.ToArray();
         DeviceStatus.Text=$"Press and hold a physical button to map it to Xbox {_detectingOutput}";
         HighlightSelectedMapping(_detectingOutput);
     }
@@ -288,8 +329,9 @@ public partial class MainWindow
         _guidedMappingActive = true;
         _detecting = false;
         _previousPressed=_mapping.GetPressedPhysicalButtons(_snapshot);
-        _guidedBaselineLeftTrigger=_snapshot.Axes.Length>2?_snapshot.Axes[2]:32768;
-        _guidedBaselineRightTrigger=_snapshot.Axes.Length>5?_snapshot.Axes[5]:32768;
+        _guidedAxisBaselines=_snapshot.Axes.ToArray();
+        _guidedLeftTriggerAxis=-1;
+        _guidedRightTriggerAxis=-1;
         _previousPovDirection=GetPovDirection(_snapshot);
         GuidedMappingOverlay.Visibility=System.Windows.Visibility.Visible;
         _guidedBlinkOn=true;
@@ -300,8 +342,7 @@ public partial class MainWindow
     {
         RefreshMapping();
         _previousPressed=_mapping.GetPressedPhysicalButtons(_snapshot);
-        _guidedBaselineLeftTrigger=_snapshot.Axes.Length>2?_snapshot.Axes[2]:32768;
-        _guidedBaselineRightTrigger=_snapshot.Axes.Length>5?_snapshot.Axes[5]:32768;
+        _guidedAxisBaselines=_snapshot.Axes.ToArray();
         _previousPovDirection=GetPovDirection(_snapshot);
         _guidedStep++;
         if(_guidedStep>=_guidedSequence.Length)
@@ -313,11 +354,19 @@ public partial class MainWindow
     {
         leftTrigger=target=="LeftTrigger";
         if(target!="LeftTrigger"&&target!="RightTrigger")return false;
-        int baseline=leftTrigger?_guidedBaselineLeftTrigger:_guidedBaselineRightTrigger;
-        int axisIndex=leftTrigger?2:5;
-        if(_snapshot.Axes.Length<=axisIndex)return false;
-        int current=_snapshot.Axes[axisIndex];
-        return Math.Abs(current-baseline)>3000;
+        int otherMappedAxis=leftTrigger?_guidedRightTriggerAxis:_guidedLeftTriggerAxis;
+        for(int axis=0;axis<_snapshot.Axes.Length;axis++)
+        {
+            if(axis==otherMappedAxis)continue;
+            int baseline=axis<_guidedAxisBaselines.Length?_guidedAxisBaselines[axis]:32768;
+            if(Math.Abs(_snapshot.Axes[axis]-baseline)>3000)
+            {
+                if(leftTrigger)_guidedLeftTriggerAxis=axis;
+                else _guidedRightTriggerAxis=axis;
+                return true;
+            }
+        }
+        return false;
     }
     private static string GetPovDirection(InputSnapshot snapshot)
     {
