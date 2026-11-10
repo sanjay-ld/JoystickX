@@ -9,7 +9,7 @@ Made by **Sanjay**.
 ## Features
 
 - Physical USB controller detection
-- 16-step guided calibration
+- Guided calibration for buttons, triggers, D-pad directions, and right-stick axes
 - Xbox A, B, X, Y, LB, RB, LT, RT, View, Menu and stick buttons
 - D-pad Up, Down, Left and Right mapping
 - Adjustable stick and trigger settings
@@ -86,8 +86,9 @@ winget install --exact --id Microsoft.DotNet.DesktopRuntime.8
 3. Select **Guided Setup**.
 4. Every physical button is initially shown as unmapped.
 5. When an Xbox button, trigger, stick, or D-pad direction blinks, press the corresponding physical control.
-6. Release and press the next control only when prompted.
-7. Save the resulting profile using the Profile panel.
+6. During the right-stick step, move the right analog stick in each direction so JoystickX can detect its axes.
+7. Release and press the next control only when prompted.
+8. Save the resulting profile using the Profile panel.
 
 Guided Setup maps:
 
@@ -97,6 +98,8 @@ Guided Setup maps:
 - Back/View and Start/Menu
 - Left Stick and Right Stick
 - D-pad Up, Down, Left and Right
+
+The default face-button mapping follows DirectInput button order: A = Button 1, B = Button 2, X = Button 3, and Y = Button 4. Canceling Guided Setup restores the mapping that was active before calibration.
 
 The app prevents one physical control from being assigned to more than one virtual output during guided setup.
 

@@ -45,7 +45,6 @@ public sealed class VirtualXboxController : IDisposable
             int Axis(int index) => input.Axes.Length > index ? input.Axes[index] : 32768;
             bool Button(int index) => input.ButtonStates.Length > index && input.ButtonStates[index] != 0;
             var p = processor.Profile;
-            processor.LockRightStickAxes(input);
             int Center(int index) => input.AxisCenters.Length > index ? input.AxisCenters[index] : 32768;
             int rightX=p.RightStickXAxis;
             int rightY=p.RightStickYAxis;

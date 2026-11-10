@@ -18,7 +18,6 @@ public sealed class InputProcessor
 {
     public Profile Profile { get; }
     private readonly Dictionary<int,(int Min,int Max,int Baseline)> _triggerRanges = new();
-    private bool _rightStickAxesLocked;
     public InputProcessor(Profile profile) => Profile = profile;
     public short ApplyStick(int value, bool invert, double sensitivity = 1.0)
     {
@@ -39,27 +38,6 @@ public sealed class InputProcessor
         normalized = Math.Sign(normalized) * Math.Min(1.0, (Math.Abs(normalized) - deadzone) / (1.0 - deadzone));
         normalized *= sensitivity * Profile.Sensitivity;
         return (short)Math.Clamp(normalized * 32767.0, -32768, 32767);
-    }
-    public void LockRightStickAxes(InputSnapshot input)
-    {
-        if(_rightStickAxesLocked || input.Axes.Length < 6) return;
-        int center(int axis)=>input.AxisCenters.Length>axis?input.AxisCenters[axis]:32768;
-        int standard=0;
-        int alternative=0;
-        standard=Math.Abs(input.Axes[3]-center(3))+Math.Abs(input.Axes[4]-center(4));
-        alternative=Math.Abs(input.Axes[2]-center(2))+Math.Abs(input.Axes[5]-center(5));
-        if(standard>=1000)
-        {
-            Profile.RightStickXAxis=3;
-            Profile.RightStickYAxis=4;
-            _rightStickAxesLocked=true;
-        }
-        else if(alternative>=1000)
-        {
-            Profile.RightStickXAxis=2;
-            Profile.RightStickYAxis=5;
-            _rightStickAxesLocked=true;
-        }
     }
     public byte ApplyTrigger(int value)
     {
@@ -105,10 +83,10 @@ public sealed class InputProcessor
         Profile.InvertRightY=true;
         Profile.RightStickXAxis=3;
         Profile.RightStickYAxis=4;
-        Profile.ButtonMap["A"]=2;
+        Profile.ButtonMap["A"]=0;
         Profile.ButtonMap["B"]=1;
-        Profile.ButtonMap["X"]=3;
-        Profile.ButtonMap["Y"]=0;
+        Profile.ButtonMap["X"]=2;
+        Profile.ButtonMap["Y"]=3;
         Profile.ButtonMap["LeftShoulder"]=4;
         Profile.ButtonMap["RightShoulder"]=5;
         Profile.TriggerMap["LeftTrigger"]=-(6+1);
