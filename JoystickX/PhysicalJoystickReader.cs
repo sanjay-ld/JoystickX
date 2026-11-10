@@ -29,39 +29,30 @@ public sealed class PhysicalJoystickReader : IDisposable
     {
         Disconnect();
         var directInput = new DirectInput();
-        Joystick? joystick = null;
-        try
-        {
-            joystick = new Joystick(directInput, instanceGuid);
-            joystick.Properties.BufferSize = 128;
-            joystick.Acquire();
-            var axisCenters = CaptureAxisCenters(joystick);
-            _joystick = joystick;
-            _keepDirectInput = directInput;
-            _axisCenters = axisCenters;
-            return true;
-        }
-        catch
-        {
-            joystick?.Dispose();
-            directInput.Dispose();
-            throw;
-        }
+        var joystick = new Joystick(directInput, instanceGuid);
+        joystick.Properties.BufferSize = 128;
+        foreach (var effect in joystick.GetObjects(DeviceObjectTypeFlags.Axis)) { }
+        joystick.Acquire();
+        _axisCenters = CaptureAxisCenters(joystick);
+        _joystick = joystick; _keepDirectInput = directInput; return true;
     }
     private static int[] CaptureAxisCenters(Joystick joystick)
     {
         var sums = new long[6];
         int samples = 12;
-        for (int sample = 0; sample < samples; sample++)
+        for(int sample=0;sample<samples;sample++)
         {
-            joystick.Poll();
-            var state = joystick.GetCurrentState();
-            int[] axes = { state.X, state.Y, state.Z, state.RotationX, state.RotationY, state.RotationZ };
-            for (int axis = 0; axis < axes.Length; axis++)
-                sums[axis] += axes[axis];
+            try
+            {
+                joystick.Poll();
+                var state=joystick.GetCurrentState();
+                int[] axes=new[] {state.X,state.Y,state.Z,state.RotationX,state.RotationY,state.RotationZ};
+                for(int axis=0;axis<axes.Length;axis++) sums[axis]+=axes[axis];
+            }
+            catch { }
             Thread.Sleep(5);
         }
-        return sums.Select(sum => Math.Clamp((int)(sum / samples), 0, 65535)).ToArray();
+        return sums.Select(sum=>Math.Clamp((int)(sum/samples),0,65535)).ToArray();
     }
     private DirectInput? _keepDirectInput;
     public void Disconnect()

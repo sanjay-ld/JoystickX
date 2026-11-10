@@ -128,9 +128,9 @@
                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Width="520">
                                     <TextBlock Text="Gamepad Calibration" FontSize="34" FontWeight="SemiBold"
                                                HorizontalAlignment="Center" Margin="0,0,0,18"/>
-                                    <TextBlock x:Name="GuidedProgress" Text="1/17" FontSize="16"
+                                    <TextBlock x:Name="GuidedProgress" Text="1/16" FontSize="16"
                                                Foreground="#BFC5D0" HorizontalAlignment="Center"/>
-                                    <ProgressBar x:Name="GuidedProgressBar" Height="10" Minimum="1" Maximum="17" Value="1"
+                                    <ProgressBar x:Name="GuidedProgressBar" Height="10" Minimum="1" Maximum="16" Value="1"
                                                  Foreground="#42B883" Background="#30343D" BorderThickness="0"
                                                  Margin="0,16,0,26"/>
                                     <TextBlock x:Name="GuidedPrompt" Text="Press the A equivalent on your gamepad."

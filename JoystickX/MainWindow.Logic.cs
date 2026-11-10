@@ -28,24 +28,19 @@ public partial class MainWindow
         "LeftTrigger", "RightTrigger",
         "Back", "Start",
         "LeftThumb", "RightThumb",
-        "RightStick",
         "DpadUp", "DpadDown", "DpadLeft", "DpadRight"
     };
-    private readonly Dictionary<string, int> _originalButtonMap = new();
-    private readonly Dictionary<string, int> _originalTriggerMap = new();
-    private readonly Dictionary<string, string> _originalDpadMap = new();
     private string _detectingOutput = "A";
     private int[] _previousPressed = Array.Empty<int>();
     private readonly System.Windows.Threading.DispatcherTimer _guidedBlinkTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
     private bool _guidedBlinkOn;
     private string _previousPovDirection = "Centered";
+    private int _guidedBaselineLeftTrigger = 32768;
+    private int _guidedBaselineRightTrigger = 32768;
     private int[] _guidedAxisBaselines = Array.Empty<int>();
-    private int[] _guidedAxisPeakDeviations = Array.Empty<int>();
     private int[] _detectingAxisBaselines = Array.Empty<int>();
     private int _guidedLeftTriggerAxis = -1;
     private int _guidedRightTriggerAxis = -1;
-    private int _originalRightStickXAxis;
-    private int _originalRightStickYAxis;
 
     private void InitializeJoystickX()
     {
@@ -134,27 +129,13 @@ public partial class MainWindow
                     var found=pressed.Except(_previousPressed).FirstOrDefault(i=>i>=0);
                     var target=_guidedSequence[_guidedStep];
                     bool triggerDetected=TryDetectGuidedTrigger(target,out bool leftTrigger);
-                    int rightStickXAxis=_profile.RightStickXAxis;
-                    int rightStickYAxis=_profile.RightStickYAxis;
-                    bool rightStickDetected=target=="RightStick" &&
-                        TryDetectGuidedRightStick(out rightStickXAxis,out rightStickYAxis);
                     string? dpadDetected=target.StartsWith("Dpad",StringComparison.Ordinal)
                         ? TryDetectGuidedDpad(target,currentPovDirection)
                         : null;
-                    if(found>=0 || triggerDetected || rightStickDetected || dpadDetected!=null)
+                    if(found>=0 || triggerDetected || dpadDetected!=null)
                     {
                         Dispatcher.Invoke(() =>
                         {
-                            if(target=="RightStick")
-                            {
-                                if(rightStickDetected)
-                                {
-                                    _profile.RightStickXAxis=rightStickXAxis;
-                                    _profile.RightStickYAxis=rightStickYAxis;
-                                    AdvanceGuidedMapping();
-                                }
-                                return;
-                            }
                             if(triggerDetected)
                             {
                                 string triggerOutput=leftTrigger ? "LeftTrigger" : "RightTrigger";
@@ -216,7 +197,7 @@ public partial class MainWindow
             catch(Exception ex){Dispatcher.Invoke(()=>DeviceStatus.Text="Input loop error: "+ex.Message);await Task.Delay(500);}
         }
     }
-    private void UpdateMonitor(){var s=_snapshot;int Axis(int i)=>s.Axes.Length>i?s.Axes[i]:32768;int Center(int i)=>s.AxisCenters.Length>i?s.AxisCenters[i]:32768;short N(int i,bool inv)=>_processor.ApplyStick(Axis(i),inv,i,1.0,Center(i));LX.Value=N(0,false);LY.Value=N(1,_profile.InvertLeftY);int rightX=_profile.RightStickXAxis;int rightY=_profile.RightStickYAxis;RX.Value=_processor.ApplyStick(Axis(rightX),false,rightX,1.0,Center(rightX));RY.Value=_processor.ApplyStick(Axis(rightY),_profile.InvertRightY,rightY,1.0,Center(rightY));LeftStickText.Text=$"Left X: {(short)LX.Value}   Left Y: {(short)LY.Value}";RightStickText.Text=$"Right X: {(short)RX.Value}   Right Y: {(short)RY.Value}";int leftTriggerAxis=_profile.TriggerMap.TryGetValue("LeftTrigger",out int leftAxis)?leftAxis:2;int rightTriggerAxis=_profile.TriggerMap.TryGetValue("RightTrigger",out int rightAxis)?rightAxis:5;LT.Value=leftTriggerAxis>=0?_processor.ApplyTrigger(Axis(leftTriggerAxis),leftTriggerAxis):(byte)(s.ButtonStates.Length> -leftTriggerAxis-1&&s.ButtonStates[-leftTriggerAxis-1]!=0?255:0);RT.Value=rightTriggerAxis>=0?_processor.ApplyTrigger(Axis(rightTriggerAxis),rightTriggerAxis):(byte)(s.ButtonStates.Length> -rightTriggerAxis-1&&s.ButtonStates[-rightTriggerAxis-1]!=0?255:0);LTText.Text=$"LT: {(byte)LT.Value}";RTText.Text=$"RT: {(byte)RT.Value}";if(ButtonPanel.Children.Count==0)for(int i=0;i<16;i++)ButtonPanel.Children.Add(new System.Windows.Controls.Border{Margin=new System.Windows.Thickness(3),CornerRadius=new System.Windows.CornerRadius(5),Padding=new System.Windows.Thickness(9,5,9,5),Background=System.Windows.Media.Brushes.DarkSlateGray,Child=new System.Windows.Controls.TextBlock{Text=$"B{i+1}",Foreground=System.Windows.Media.Brushes.White}});for(int i=0;i<ButtonPanel.Children.Count;i++){var b=(System.Windows.Controls.Border)ButtonPanel.Children[i];b.Background=new System.Windows.Media.SolidColorBrush(i<s.ButtonStates.Length&&s.ButtonStates[i]!=0?System.Windows.Media.Color.FromRgb(66,184,131):System.Windows.Media.Color.FromRgb(37,41,50));}DpadText.Text=s.Pov.Length>0?DpadName(s.Pov[0]):"Centered / unavailable";}
+    private void UpdateMonitor(){var s=_snapshot;_processor.LockRightStickAxes(s);int Axis(int i)=>s.Axes.Length>i?s.Axes[i]:32768;int Center(int i)=>s.AxisCenters.Length>i?s.AxisCenters[i]:32768;short N(int i,bool inv)=>_processor.ApplyStick(Axis(i),inv,i,1.0,Center(i));LX.Value=N(0,false);LY.Value=N(1,_profile.InvertLeftY);int rightX=_profile.RightStickXAxis;int rightY=_profile.RightStickYAxis;RX.Value=_processor.ApplyStick(Axis(rightX),false,rightX,1.0,Center(rightX));RY.Value=_processor.ApplyStick(Axis(rightY),_profile.InvertRightY,rightY,1.0,Center(rightY));LeftStickText.Text=$"Left X: {(short)LX.Value}   Left Y: {(short)LY.Value}";RightStickText.Text=$"Right X: {(short)RX.Value}   Right Y: {(short)RY.Value}";int leftTriggerAxis=_profile.TriggerMap.TryGetValue("LeftTrigger",out int leftAxis)?leftAxis:2;int rightTriggerAxis=_profile.TriggerMap.TryGetValue("RightTrigger",out int rightAxis)?rightAxis:5;LT.Value=leftTriggerAxis>=0?_processor.ApplyTrigger(Axis(leftTriggerAxis),leftTriggerAxis):(byte)(s.ButtonStates.Length> -leftTriggerAxis-1&&s.ButtonStates[-leftTriggerAxis-1]!=0?255:0);RT.Value=rightTriggerAxis>=0?_processor.ApplyTrigger(Axis(rightTriggerAxis),rightTriggerAxis):(byte)(s.ButtonStates.Length> -rightTriggerAxis-1&&s.ButtonStates[-rightTriggerAxis-1]!=0?255:0);LTText.Text=$"LT: {(byte)LT.Value}";RTText.Text=$"RT: {(byte)RT.Value}";if(ButtonPanel.Children.Count==0)for(int i=0;i<16;i++)ButtonPanel.Children.Add(new System.Windows.Controls.Border{Margin=new System.Windows.Thickness(3),CornerRadius=new System.Windows.CornerRadius(5),Padding=new System.Windows.Thickness(9,5,9,5),Background=System.Windows.Media.Brushes.DarkSlateGray,Child=new System.Windows.Controls.TextBlock{Text=$"B{i+1}",Foreground=System.Windows.Media.Brushes.White}});for(int i=0;i<ButtonPanel.Children.Count;i++){var b=(System.Windows.Controls.Border)ButtonPanel.Children[i];b.Background=new System.Windows.Media.SolidColorBrush(i<s.ButtonStates.Length&&s.ButtonStates[i]!=0?System.Windows.Media.Color.FromRgb(66,184,131):System.Windows.Media.Color.FromRgb(37,41,50));}DpadText.Text=s.Pov.Length>0?DpadName(s.Pov[0]):"Centered / unavailable";}
     private static string DpadName(int p)=>p switch{0=>"Up",4500=>"Up + Right",9000=>"Right",13500=>"Right + Down",18000=>"Down",22500=>"Down + Left",27000=>"Left",31500=>"Left + Up",-1=>"Centered",_=>"Centered"};
     private void OpenDriver_Click(object sender,System.Windows.RoutedEventArgs e)=>Process.Start(new ProcessStartInfo{FileName=DriverManager.OfficialDownloadUrl,UseShellExecute=true});
     private void SaveProfile_Click(object sender,System.Windows.RoutedEventArgs e){if(string.IsNullOrWhiteSpace(ProfileName.Text))return;ApplySettings();_profiles.Save(ProfileName.Text,_profile);RefreshProfiles();}
@@ -230,16 +211,12 @@ public partial class MainWindow
         {
             "A","B","X","Y","LeftShoulder","RightShoulder",
             "LeftTrigger","RightTrigger","Back","Start","LeftThumb","RightThumb",
-            "RightStick","DpadUp","DpadDown","DpadLeft","DpadRight"
+            "DpadUp","DpadDown","DpadLeft","DpadRight"
         };
         foreach(string output in outputs)
         {
             string physicalText="None";
-            if(output=="RightStick")
-            {
-                physicalText=$"Physical Axes {_profile.RightStickXAxis+1} and {_profile.RightStickYAxis+1}";
-            }
-            else if(output=="LeftTrigger"||output=="RightTrigger")
+            if(output=="LeftTrigger"||output=="RightTrigger")
             {
                 if(_profile.TriggerMap.TryGetValue(output,out int axis))
                     physicalText=axis>=0 ? $"Physical Trigger Axis {axis+1}" : $"Physical Button {-axis}";
@@ -274,8 +251,7 @@ public partial class MainWindow
     private static string GetShortOutputName(string output)=>output switch
     {
         "LeftShoulder"=>"LB","RightShoulder"=>"RB","Back"=>"View","Start"=>"Menu",
-        "LeftThumb"=>"LS","RightThumb"=>"RS","RightStick"=>"Right Stick",
-        "LeftTrigger"=>"LT","RightTrigger"=>"RT",
+        "LeftThumb"=>"LS","RightThumb"=>"RS","LeftTrigger"=>"LT","RightTrigger"=>"RT",
         "DpadUp"=>"D-pad Up","DpadDown"=>"D-pad Down","DpadLeft"=>"D-pad Left","DpadRight"=>"D-pad Right",_=>output
     };
     private void DetectButton_Click(object sender,System.Windows.RoutedEventArgs e)
@@ -304,7 +280,7 @@ public partial class MainWindow
         {
             ["A"]=AButtonVisual,["B"]=BButtonVisual,["X"]=XButtonVisual,["Y"]=YButtonVisual,
             ["LeftShoulder"]=LBVisual,["RightShoulder"]=RBVisual,
-            ["Back"]=BackVisual,["Start"]=StartVisual,["RightStick"]=RightThumbVisual,
+            ["Back"]=BackVisual,["Start"]=StartVisual,
             ["LeftThumb"]=LeftThumbVisual,["RightThumb"]=RightThumbVisual,
             ["LeftTrigger"]=LTVisual,["RightTrigger"]=RTVisual,
             ["DpadUp"]=DpadUpVisual,["DpadDown"]=DpadDownVisual,
@@ -340,19 +316,11 @@ public partial class MainWindow
 
     private void StartGuidedMapping_Click(object sender, System.Windows.RoutedEventArgs e)
     {
-        if (!_reader.IsConnected)
+        if (_selected == null)
         {
-            System.Windows.MessageBox.Show("Connect a physical controller before starting calibration.");
+            System.Windows.MessageBox.Show("Please connect a physical controller first.");
             return;
         }
-        _snapshot = _reader.ReadSnapshot();
-        CopyMappings(_profile.ButtonMap, _originalButtonMap);
-        CopyMappings(_profile.TriggerMap, _originalTriggerMap);
-        _originalDpadMap.Clear();
-        foreach (var mapping in _profile.DpadMap)
-            _originalDpadMap[mapping.Key] = mapping.Value;
-        _originalRightStickXAxis = _profile.RightStickXAxis;
-        _originalRightStickYAxis = _profile.RightStickYAxis;
         _profile.ButtonMap.Clear();
         _profile.TriggerMap.Clear();
         _profile.DpadMap.Clear();
@@ -362,7 +330,6 @@ public partial class MainWindow
         _detecting = false;
         _previousPressed=_mapping.GetPressedPhysicalButtons(_snapshot);
         _guidedAxisBaselines=_snapshot.Axes.ToArray();
-        _guidedAxisPeakDeviations=new int[_guidedAxisBaselines.Length];
         _guidedLeftTriggerAxis=-1;
         _guidedRightTriggerAxis=-1;
         _previousPovDirection=GetPovDirection(_snapshot);
@@ -376,19 +343,12 @@ public partial class MainWindow
         RefreshMapping();
         _previousPressed=_mapping.GetPressedPhysicalButtons(_snapshot);
         _guidedAxisBaselines=_snapshot.Axes.ToArray();
-        _guidedAxisPeakDeviations=new int[_guidedAxisBaselines.Length];
         _previousPovDirection=GetPovDirection(_snapshot);
         _guidedStep++;
         if(_guidedStep>=_guidedSequence.Length)
             FinishGuidedMapping();
         else
             UpdateGuidedStep();
-    }
-    private static void CopyMappings<T>(Dictionary<string, T> source, Dictionary<string, T> destination)
-    {
-        destination.Clear();
-        foreach (var mapping in source)
-            destination[mapping.Key] = mapping.Value;
     }
     private bool TryDetectGuidedTrigger(string target,out bool leftTrigger)
     {
@@ -407,40 +367,6 @@ public partial class MainWindow
             }
         }
         return false;
-    }
-    private bool TryDetectGuidedRightStick(out int xAxis, out int yAxis)
-    {
-        xAxis = _profile.RightStickXAxis;
-        yAxis = _profile.RightStickYAxis;
-        if (_snapshot.Axes.Length < 6)
-            return false;
-
-        int Deviation(int axis)
-        {
-            int baseline = axis < _guidedAxisBaselines.Length ? _guidedAxisBaselines[axis] : 32768;
-            int deviation = Math.Abs(_snapshot.Axes[axis] - baseline);
-            _guidedAxisPeakDeviations[axis] = Math.Max(_guidedAxisPeakDeviations[axis], deviation);
-            return _guidedAxisPeakDeviations[axis];
-        }
-
-        var standard = (X: Deviation(3), Y: Deviation(4));
-        var alternate = (X: Deviation(2), Y: Deviation(5));
-        int standardScore = Math.Min(standard.X, standard.Y);
-        int alternateScore = Math.Min(alternate.X, alternate.Y);
-        if (Math.Max(standardScore, alternateScore) < 3000)
-            return false;
-
-        if (standardScore >= alternateScore)
-        {
-            xAxis = 3;
-            yAxis = 4;
-        }
-        else
-        {
-            xAxis = 2;
-            yAxis = 5;
-        }
-        return true;
     }
     private static string GetPovDirection(InputSnapshot snapshot)
     {
@@ -464,13 +390,8 @@ public partial class MainWindow
         GuidedProgress.Text=$"{_guidedStep+1}/{_guidedSequence.Length}";
         GuidedProgressBar.Maximum=_guidedSequence.Length;
         GuidedProgressBar.Value=_guidedStep+1;
-        bool calibratingRightStick = target == "RightStick";
-        GuidedPrompt.Text=calibratingRightStick
-            ? "Move the right analog stick up, down, left, and right."
-            : $"Press the {GetShortOutputName(target)} equivalent on your gamepad.";
-        GuidedStatus.Text=calibratingRightStick
-            ? "Move both axes through their range to calibrate the right stick."
-            : "Keep the button pressed briefly, then release it.";
+        GuidedPrompt.Text=$"Press the {GetShortOutputName(target)} equivalent on your gamepad.";
+        GuidedStatus.Text="Keep the button pressed briefly, then release it.";
         _detectingOutput=target;
         HighlightSelectedMapping(target);
         DeviceStatus.Text=$"Guided Setup: press physical button for Xbox {GetShortOutputName(target)}";
@@ -491,7 +412,7 @@ public partial class MainWindow
         "A"=>AButtonVisual,"B"=>BButtonVisual,"X"=>XButtonVisual,"Y"=>YButtonVisual,
         "LeftShoulder"=>LBVisual,"RightShoulder"=>RBVisual,
         "Back"=>BackVisual,"Start"=>StartVisual,
-        "LeftThumb"=>LeftThumbVisual,"RightThumb"=>RightThumbVisual,"RightStick"=>RightThumbVisual,
+        "LeftThumb"=>LeftThumbVisual,"RightThumb"=>RightThumbVisual,
         "LeftTrigger"=>LTVisual,"RightTrigger"=>RTVisual,
         "DpadUp"=>DpadUpVisual,"DpadDown"=>DpadDownVisual,
         "DpadLeft"=>DpadLeftVisual,"DpadRight"=>DpadRightVisual,_=>null
@@ -514,9 +435,9 @@ public partial class MainWindow
         _guidedMappingActive=false;
         _guidedBlinkTimer.Stop();
         GuidedMappingOverlay.Visibility=System.Windows.Visibility.Collapsed;
-        DeviceStatus.Text="Guided calibration complete!";
+        DeviceStatus.Text="Guided mapping complete!";
         RefreshMapping();
-        System.Windows.MessageBox.Show("Button, trigger, D-pad, and right-stick calibration is complete.");
+        System.Windows.MessageBox.Show("All buttons have been mapped successfully!");
     }
     private void CancelGuidedMapping_Click(object sender,System.Windows.RoutedEventArgs e)
     {
@@ -524,13 +445,6 @@ public partial class MainWindow
         _guidedBlinkTimer.Stop();
         _guidedStep=0;
         GuidedMappingOverlay.Visibility=System.Windows.Visibility.Collapsed;
-        CopyMappings(_originalButtonMap, _profile.ButtonMap);
-        CopyMappings(_originalTriggerMap, _profile.TriggerMap);
-        _profile.DpadMap.Clear();
-        foreach (var mapping in _originalDpadMap)
-            _profile.DpadMap[mapping.Key] = mapping.Value;
-        _profile.RightStickXAxis = _originalRightStickXAxis;
-        _profile.RightStickYAxis = _originalRightStickYAxis;
         DeviceStatus.Text="Guided mapping cancelled.";
         RefreshMapping();
     }
